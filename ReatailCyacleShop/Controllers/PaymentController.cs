@@ -1,206 +1,147 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using RetailCycleShopAPI.Models;
-using System.Collections.Generic;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.Extensions.Logging;
-using RetailCycleShopAPI.models.dtos;
+using Razorpay.Api;
 using RetailCycleShopAPI.models.enums;
-using RetailCycleShopAPI.Services;
 using RetailCycleShopAPI.module;
+using Microsoft.EntityFrameworkCore; // Changed from System.Data.Entity
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
 
-namespace RetailCycleShopAPI.Controllers
+[ApiController]
+[Route("api/[controller]")]
+public class RazorpayController : ControllerBase
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    [Authorize(Roles = "Admin,Employee")]
-    public class PaymentController : ControllerBase
+    private readonly IConfiguration _configuration;
+    private readonly ApplicationDbContext _context;
+    private readonly ILogger<RazorpayController> _logger;
+
+    public RazorpayController(
+        IConfiguration configuration,
+        ApplicationDbContext context,
+        ILogger<RazorpayController> logger)
     {
-        private readonly ApplicationDbContext _context;
-        private readonly ILogger<PaymentController> _logger;
-        private readonly IPaymentProcessor _paymentProcessor;
-
-        public PaymentController(
-            ApplicationDbContext context,
-            ILogger<PaymentController> logger,
-            IPaymentProcessor paymentProcessor)
-        {
-            _context = context;
-            _logger = logger;
-            _paymentProcessor = paymentProcessor;
-        }
-
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<Payment>>> GetPayments()
-        {
-            return await _context.Payments
-                .Include(p => p.Order)
-                .ThenInclude(o => o.Customer)
-                .ToListAsync();
-        }
-
-        [HttpGet("{id}")]
-        public async Task<ActionResult<Payment>> GetPayment(int id)
-        {
-            var payment = await _context.Payments
-                .Include(p => p.Order)
-                .ThenInclude(o => o.Customer)
-                .FirstOrDefaultAsync(p => p.PaymentId == id);
-
-            return payment == null ? NotFound() : payment;
-        }
-
-        [HttpPost]
-        public async Task<ActionResult<Payment>> ProcessPayment([FromBody] PaymentProcessDto paymentDto)
-        {
-            using var transaction = await _context.Database.BeginTransactionAsync();
-            try
-            {
-                // Validate order exists
-                var order = await _context.Orders
-                    .Include(o => o.Customer)
-                    .FirstOrDefaultAsync(o => o.OrderId == paymentDto.OrderId);
-
-                if (order == null)
-                {
-                    return BadRequest("Order not found");
-                }
-
-                // Process payment with external service
-                var paymentResult = await _paymentProcessor.ProcessPayment(
-                    paymentDto.PaymentMethod,
-                    paymentDto.Amount,
-                    order.OrderNumber,
-                    paymentDto.PaymentDetails);
-
-                if (!paymentResult.Success)
-                {
-                    return BadRequest(paymentResult.ErrorMessage);
-                }
-
-                // Create payment record
-                var payment = new Payment
-                {
-                    PaymentType = (int)paymentDto.PaymentMethod,
-                    Amount = paymentDto.Amount,
-                    Status = (int)PaymentStatus.Completed,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow,
-                    OrderId = order.OrderId,
-                    //TransactionId = paymentResult.TransactionId,
-                    ReceiptUrl = paymentResult.ReceiptUrl
-                };
-
-                _context.Payments.Add(payment);
-
-                // Update order status
-                order.Status = (int)OrderStatus.Processing;
-                order.PaymentId = payment.PaymentId;
-                order.UpdatedAt = DateTime.UtcNow;
-
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
-
-                return CreatedAtAction(nameof(GetPayment), new { id = payment.PaymentId }, payment);
-            }
-            catch (Exception ex)
-            {
-                await transaction.RollbackAsync();
-                _logger.LogError(ex, "Error processing payment");
-                return StatusCode(500, "Internal server error");
-            }
-        }
-
-        //[HttpPost("webhook")]
-        //[AllowAnonymous]
-        //public async Task<IActionResult> PaymentWebhook([FromBody] PaymentWebhookDto webhookDto)
-        //{
-        //    try
-        //    {
-        //        var isValid = await _paymentProcessor.VerifyWebhookSignature(webhookDto);
-        //        if (!isValid)
-        //        {
-        //            return Unauthorized();
-        //        }
-
-        //        var payment = await _context.Payments
-        //            .FirstOrDefaultAsync(p => p.TransactionId == webhookDto.TransactionId);
-
-        //        if (payment == null)
-        //        {
-        //            return NotFound();
-        //        }
-
-        //        switch (webhookDto.EventType)
-        //        {
-        //            case PaymentWebhookEventType.Completed:
-        //                payment.Status = (int)PaymentStatus.Completed;
-        //                break;
-        //            case PaymentWebhookEventType.Failed:
-        //                payment.Status = (int)PaymentStatus.Failed;
-        //                break;
-        //            case PaymentWebhookEventType.Refunded:
-        //                payment.Status = (int)PaymentStatus.Refunded;
-        //                break;
-        //        }
-
-        //        payment.UpdatedAt = DateTime.UtcNow;
-        //        await _context.SaveChangesAsync();
-
-        //        return Ok();
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        _logger.LogError(ex, "Error processing payment webhook");
-        //        return StatusCode(500);
-        //    }
-        //}
-
-    //    [HttpPost("refund/{paymentId}")]
-    //    public async Task<IActionResult> ProcessRefund(int paymentId)
-    //    {
-    //        using var transaction = await _context.Database.BeginTransactionAsync();
-    //        try
-    //        {
-    //            var payment = await _context.Payments
-    //                .Include(p => p.Order)
-    //                .FirstOrDefaultAsync(p => p.PaymentId == paymentId);
-
-    //            if (payment == null)
-    //            {
-    //                return NotFound();
-    //            }
-
-    //            var refundResult = await _paymentProcessor.ProcessRefund(
-    //                payment.TransactionId,
-    //                payment.Amount);
-
-    //            if (!refundResult.Success)
-    //            {
-    //                return BadRequest(refundResult.ErrorMessage);
-    //            }
-
-    //            payment.Status = (int)PaymentStatus.Refunded;
-    //            payment.UpdatedAt = DateTime.UtcNow;
-
-    //            if (payment.Order != null)
-    //            {
-    //                payment.Order.Status = (int)OrderStatus.Cancelled;
-    //                payment.Order.UpdatedAt = DateTime.UtcNow;
-    //            }
-
-    //            await _context.SaveChangesAsync();
-    //            await transaction.CommitAsync();
-
-    //            return NoContent();
-    //        }
-    //        catch (Exception ex)
-    //        {
-    //            await transaction.RollbackAsync();
-    //            _logger.LogError(ex, "Error processing refund");
-    //            return StatusCode(500, "Internal server error");
-    //        }
-    //    }
+        _configuration = configuration;
+        _context = context;
+        _logger = logger;
     }
+
+    [HttpPost("create-order")]
+    public async Task<IActionResult> CreateRazorpayOrder([FromBody] RazorpayOrderRequest request)
+    {
+        try
+        {
+            // Validate order exists
+            var order = await _context.Orders
+                .Include(o => o.Customer)
+                .FirstOrDefaultAsync(o => o.OrderId == request.OrderId);
+
+            if (order == null)
+            {
+                return BadRequest("Order not found");
+            }
+
+            // Initialize Razorpay client
+            RazorpayClient client = new RazorpayClient(
+                _configuration["Razorpay:KeyId"],
+                _configuration["Razorpay:KeySecret"]);
+
+            // Create order options
+            Dictionary<string, object> options = new Dictionary<string, object>
+            {
+                { "amount", Convert.ToInt32(request.Amount * 100) }, // Amount in paise
+                { "currency", "INR" },
+                { "receipt", $"order_{order.OrderNumber}" },
+                { "payment_capture", 1 } // Auto-capture payment
+            };
+
+            // Create Razorpay order
+            Razorpay.Api.Order razorpayOrder = client.Order.Create(options);
+
+            // Return order ID to frontend
+            return Ok(new
+            {
+                id = razorpayOrder["id"],
+                currency = razorpayOrder["currency"],
+                amount = razorpayOrder["amount"]
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating Razorpay order");
+            return StatusCode(500, "Error creating payment order");
+        }
+    }
+
+    [HttpPost("verify-payment")]
+    public async Task<IActionResult> VerifyPayment([FromBody] PaymentVerificationRequest request)
+    {
+        try
+        {
+            // Validate order exists
+            var order = await _context.Orders
+                .Include(o => o.Customer)
+                .FirstOrDefaultAsync(o => o.OrderId == request.OrderId);
+
+            if (order == null)
+            {
+                return BadRequest("Order not found");
+            }
+
+            // Verify payment signature
+            RazorpayClient client = new RazorpayClient(
+                _configuration["Razorpay:KeyId"],
+                _configuration["Razorpay:KeySecret"]);
+
+            Dictionary<string, string> attributes = new Dictionary<string, string>
+            {
+                { "razorpay_payment_id", request.RazorpayPaymentId },
+                { "razorpay_order_id", request.RazorpayOrderId },
+                { "razorpay_signature", request.RazorpaySignature }
+            };
+
+            Utils.verifyPaymentSignature(attributes);
+
+            // Payment is valid, create payment record
+            var payment = new RetailCycleShopAPI.module.Payment
+            {
+                PaymentType = (int)PaymentType.Razorpay,
+                Amount = request.Amount,
+                Status = (int)PaymentStatus.Completed,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+                OrderId = order.OrderId,
+                ReceiptUrl = $"https://dashboard.razorpay.com/app/payments/{request.RazorpayPaymentId}"
+            };
+
+            _context.Payments.Add(payment);
+
+            // Update order status
+            order.Status = (int)OrderStatus.Processing;
+            order.PaymentId = payment.PaymentId;
+            order.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { success = true, paymentId = payment.PaymentId });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error verifying payment");
+            return BadRequest(new { success = false, error = ex.Message });
+        }
+    }
+}
+
+public class RazorpayOrderRequest
+{
+    public int OrderId { get; set; }
+    public decimal Amount { get; set; }
+}
+
+public class PaymentVerificationRequest
+{
+    public int OrderId { get; set; }
+    public string RazorpayPaymentId { get; set; }
+    public string RazorpayOrderId { get; set; }
+    public string RazorpaySignature { get; set; }
+    public decimal Amount { get; set; }
 }

@@ -195,13 +195,31 @@ namespace RetailCycleShopAPI.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteCustomer(int id)
         {
-            var customer = await _context.Customers.FindAsync(id);
+            var customer = await _context.Customers
+                .Include(c => c.Orders)
+                .ThenInclude(o => o.OrderItems)
+                .FirstOrDefaultAsync(c => c.CustomerId == id);
+
             if (customer == null)
             {
                 return NotFound();
             }
 
+            // First, remove all inventory histories related to customer's orders
+            var orderIds = customer.Orders.Select(o => o.OrderId).ToList();
+            var inventoryHistories = await _context.InventoryHistories
+                .Where(ih => orderIds.Contains(ih.OrderId ?? 0))
+                .ToListAsync();
+
+            _context.InventoryHistories.RemoveRange(inventoryHistories);
+
+            // Then remove the customer's orders and order items
+            _context.OrderItems.RemoveRange(customer.Orders.SelectMany(o => o.OrderItems));
+            _context.Orders.RemoveRange(customer.Orders);
+
+            // Finally remove the customer
             _context.Customers.Remove(customer);
+            
             await _context.SaveChangesAsync();
 
             return NoContent();

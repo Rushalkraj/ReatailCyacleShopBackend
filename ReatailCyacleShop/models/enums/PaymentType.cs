@@ -4,6 +4,7 @@
     {
         CreditCard = 1,
         PayPal = 2,
-        BankTransfer = 3
+        BankTransfer = 3,
+        Razorpay = 4
     }
 }
