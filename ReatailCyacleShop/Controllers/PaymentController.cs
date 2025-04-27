@@ -27,7 +27,7 @@ public class CashfreeController : ControllerBase
         _context = context;
         _logger = logger;
         _httpClient = httpClientFactory.CreateClient();
-        _httpClient.Timeout = TimeSpan.FromSeconds(30); // Add timeout
+        _httpClient.Timeout = TimeSpan.FromSeconds(30);
     }
 
     [HttpPost("create-order")]
@@ -47,13 +47,20 @@ public class CashfreeController : ControllerBase
                 return BadRequest("Order not found");
             }
 
-            // Ensure amount is in the correct format (Cashfree expects amount in INR, no paise)
+            if (request.Amount != order.TotalAmount)
+            {
+                _logger.LogWarning("Amount mismatch for OrderId: {OrderId}. Requested: {RequestAmount}, Order: {OrderAmount}",
+                    request.OrderId, request.Amount, order.TotalAmount);
+                return BadRequest("Amount does not match order total");
+            }
+
+            var cashfreeOrderId = $"order_{order.OrderNumber}_{DateTime.UtcNow.Ticks}";
             var amount = Math.Round(request.Amount, 2);
 
             var cashfreeRequest = new
             {
-                order_id = $"order_{order.OrderNumber}_{DateTime.UtcNow.Ticks}",
-                order_amount = amount.ToString("0.00"), // Format as string with 2 decimal places
+                order_id = cashfreeOrderId,
+                order_amount = amount.ToString("0.00"),
                 order_currency = "INR",
                 customer_details = new
                 {
@@ -64,7 +71,7 @@ public class CashfreeController : ControllerBase
                 order_meta = new
                 {
                     return_url = $"{_configuration["Frontend:BaseUrl"]}/payment/callback?order_id={order.OrderId}",
-                     notify_url = "http://localhost:5104/api/cashfree/webhook"
+                    notify_url = $"{_configuration["Backend:BaseUrl"]}/api/cashfree/webhook"
                 }
             };
 
@@ -72,8 +79,17 @@ public class CashfreeController : ControllerBase
             var clientSecret = _configuration["Cashfree:SecretKey"];
             var baseUrl = _configuration["Cashfree:BaseUrl"] ?? "https://sandbox.cashfree.com/pg";
 
-            if (string.IsNullOrEmpty(clientId) )throw new Exception("Cashfree AppId is missing");
-            if (string.IsNullOrEmpty(clientSecret)) throw new Exception("Cashfree SecretKey is missing");
+            if (string.IsNullOrEmpty(clientId))
+            {
+                _logger.LogError("Cashfree AppId is missing in configuration");
+                return StatusCode(500, "Payment gateway configuration error");
+            }
+
+            if (string.IsNullOrEmpty(clientSecret))
+            {
+                _logger.LogError("Cashfree SecretKey is missing in configuration");
+                return StatusCode(500, "Payment gateway configuration error");
+            }
 
             var requestMessage = new HttpRequestMessage(
                 HttpMethod.Post,
@@ -85,8 +101,7 @@ public class CashfreeController : ControllerBase
 
             var jsonContent = JsonSerializer.Serialize(cashfreeRequest, new JsonSerializerOptions
             {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                WriteIndented = true
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
             });
 
             _logger.LogInformation("Cashfree Request: {Request}", jsonContent);
@@ -106,23 +121,35 @@ public class CashfreeController : ControllerBase
             {
                 _logger.LogError("Cashfree API Error: {StatusCode} - {Response}",
                     response.StatusCode, responseContent);
-                return StatusCode(500, $"Cashfree API Error: {responseContent}");
+                return StatusCode(500, $"Payment gateway error: {responseContent}");
             }
 
-            var cashfreeResponse = JsonSerializer.Deserialize<CashfreeOrderResponse>(responseContent);
-
-            if (cashfreeResponse == null || string.IsNullOrEmpty(cashfreeResponse.payment_link))
+            try
             {
-                _logger.LogError("Invalid Cashfree response format: {Response}", responseContent);
-                return StatusCode(500, "Invalid response format from payment gateway");
+                using JsonDocument doc = JsonDocument.Parse(responseContent);
+                var root = doc.RootElement;
+
+                if (!root.TryGetProperty("payment_session_id", out var paymentSessionId))
+                {
+                    _logger.LogError("Missing payment_session_id in response");
+                    return StatusCode(500, "Invalid response from payment gateway");
+                }
+
+                // Construct the payment link manually since it's not directly in the response
+                var paymentLink = $"https://sandbox.cashfree.com/pg/redirection/#/{paymentSessionId.GetString()}";
+
+                return Ok(new
+                {
+                    payment_link = paymentLink,
+                    order_id = order.OrderId,
+                    cf_order_id = cashfreeOrderId
+                });
             }
-
-            return Ok(new
+            catch (JsonException jsonEx)
             {
-                payment_link = cashfreeResponse.payment_link,
-                order_id = cashfreeResponse.order_id,
-                cf_order_id = cashfreeResponse.order_id // Return Cashfree's order ID
-            });
+                _logger.LogError(jsonEx, "Failed to parse Cashfree response");
+                return StatusCode(500, "Failed to process payment gateway response");
+            }
         }
         catch (Exception ex)
         {
@@ -130,24 +157,24 @@ public class CashfreeController : ControllerBase
             return StatusCode(500, $"Error: {ex.Message}");
         }
     }
-
-
     [HttpPost("verify-payment")]
     public async Task<IActionResult> VerifyPayment([FromBody] PaymentVerificationRequest request)
     {
         try
         {
-            // Validate order exists
+            _logger.LogInformation("Verifying payment for OrderId: {OrderId}, CashfreeOrderId: {CashfreeOrderId}",
+                request.OrderId, request.CashfreeOrderId);
+
             var order = await _context.Orders
                 .Include(o => o.Customer)
                 .FirstOrDefaultAsync(o => o.OrderId == request.OrderId);
 
             if (order == null)
             {
-                return BadRequest("Order not found");
+                _logger.LogWarning("Order not found for OrderId: {OrderId}", request.OrderId);
+                return BadRequest(new { success = false, error = "Order not found" });
             }
 
-            // Verify payment with Cashfree
             var clientId = _configuration["Cashfree:AppId"];
             var clientSecret = _configuration["Cashfree:SecretKey"];
             var baseUrl = _configuration["Cashfree:BaseUrl"] ?? "https://sandbox.cashfree.com/pg";
@@ -163,46 +190,68 @@ public class CashfreeController : ControllerBase
             var response = await _httpClient.SendAsync(requestMessage);
             var responseContent = await response.Content.ReadAsStringAsync();
 
+            _logger.LogInformation("Cashfree Verification Response: {StatusCode} - {Response}",
+                response.StatusCode, responseContent);
+
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogError("Cashfree payment verification failed: {Response}", responseContent);
                 return BadRequest(new { success = false, error = "Payment verification failed" });
             }
 
-            var paymentsResponse = JsonSerializer.Deserialize<CashfreePaymentsResponse>(responseContent);
-
-            // Check if any payment was successful
-            var successfulPayment = paymentsResponse?.FirstOrDefault(p =>
-                p.payment_status == "SUCCESS" ||
-                p.payment_status == "COMPLETED");
-
-            if (successfulPayment == null)
+            try
             {
-                return BadRequest(new { success = false, error = "No successful payment found" });
+                using JsonDocument doc = JsonDocument.Parse(responseContent);
+                var payments = doc.RootElement.EnumerateArray();
+
+                var successfulPayment = payments.FirstOrDefault(p =>
+                    p.GetProperty("payment_status").GetString() == "SUCCESS" ||
+                    p.GetProperty("payment_status").GetString() == "COMPLETED");
+
+                if (successfulPayment.ValueKind == JsonValueKind.Undefined)
+                {
+                    _logger.LogWarning("No successful payment found for OrderId: {OrderId}", request.OrderId);
+                    return BadRequest(new
+                    {
+                        success = false,
+                        error = "Payment not completed yet. Please check again later."
+                    });
+                }
+
+                var payment = new Payment
+                {
+                    PaymentType = (int)PaymentType.Cashfree,
+                    Amount = request.Amount,
+                    Status = (int)PaymentStatus.Completed,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                    OrderId = order.OrderId,
+                    ReceiptUrl = successfulPayment.TryGetProperty("payment_url", out var url) ?
+                        url.GetString() :
+                        $"https://sandbox.cashfree.com/pg/orders/{request.CashfreeOrderId}"
+                };
+
+                _context.Payments.Add(payment);
+
+                order.Status = (int)OrderStatus.Processing;
+                order.PaymentId = payment.PaymentId;
+                order.UpdatedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+
+                return Ok(new
+                {
+                    success = true,
+                    paymentId = payment.PaymentId,
+                    status = "SUCCESS",
+                    cf_payment_id = successfulPayment.GetProperty("cf_payment_id").GetString()
+                });
             }
-
-            // Payment is valid, create payment record
-            var payment = new RetailCycleShopAPI.module.Payment
+            catch (JsonException jsonEx)
             {
-                PaymentType = (int)PaymentType.Cashfree,
-                Amount = request.Amount,
-                Status = (int)PaymentStatus.Completed,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-                OrderId = order.OrderId,
-                ReceiptUrl = successfulPayment.payment_url ?? $"https://sandbox.cashfree.com/pg/orders/{request.CashfreeOrderId}"
-            };
-
-            _context.Payments.Add(payment);
-
-            // Update order status
-            order.Status = (int)OrderStatus.Processing;
-            order.PaymentId = payment.PaymentId;
-            order.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-
-            return Ok(new { success = true, paymentId = payment.PaymentId });
+                _logger.LogError(jsonEx, "Failed to parse Cashfree verification response");
+                return StatusCode(500, new { success = false, error = "Failed to process payment verification" });
+            }
         }
         catch (Exception ex)
         {
@@ -211,16 +260,15 @@ public class CashfreeController : ControllerBase
         }
     }
 
+ 
     [HttpPost("webhook")]
     public async Task<IActionResult> HandleWebhook()
     {
         try
         {
-            // Read request body
             using var reader = new StreamReader(Request.Body);
             var requestBody = await reader.ReadToEndAsync();
 
-            // Verify signature
             var signature = Request.Headers["x-webhook-signature"].FirstOrDefault();
             var secret = _configuration["Cashfree:WebhookSecret"];
 
@@ -236,17 +284,49 @@ public class CashfreeController : ControllerBase
                 return BadRequest("Invalid webhook data");
             }
 
-            // Process the webhook based on event type
+            // Extract order number from Cashfree order ID (order_12345_123456789)
+            var orderNumber = webhookData.data.order.order_id.Split('_')[1];
+            var order = await _context.Orders
+                .FirstOrDefaultAsync(o => o.OrderNumber == orderNumber);
+
+            if (order == null) return Ok();
+
             switch (webhookData.type)
             {
                 case "ORDER.PAYMENT_COMPLETED":
-                    await ProcessPaymentCompleted(webhookData.data);
+                    var payment = new Payment
+                    {
+                        PaymentType = (int)PaymentType.Cashfree,
+                        Amount = webhookData.data.order.order_amount,
+                        Status = (int)PaymentStatus.Completed,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow,
+                        OrderId = order.OrderId,
+                        ReceiptUrl = webhookData.data.payment.payment_url ?? $"https://sandbox.cashfree.com/pg/orders/{webhookData.data.order.order_id}"
+                    };
+
+                    _context.Payments.Add(payment);
+                    order.Status = (int)OrderStatus.Processing;
+                    order.PaymentId = payment.PaymentId;
                     break;
+
                 case "ORDER.PAYMENT_FAILED":
-                    await ProcessPaymentFailed(webhookData.data);
+                    var failedPayment = new Payment
+                    {
+                        PaymentType = (int)PaymentType.Cashfree,
+                        Amount = webhookData.data.order.order_amount,
+                        Status = (int)PaymentStatus.Failed,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow,
+                        OrderId = order.OrderId
+                    };
+
+                    _context.Payments.Add(failedPayment);
                     break;
-                    // Add other event types as needed
             }
+
+            order.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
 
             return Ok();
         }
@@ -262,72 +342,22 @@ public class CashfreeController : ControllerBase
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
         var computedHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(payload));
         var computedSignature = BitConverter.ToString(computedHash).Replace("-", "").ToLower();
-
         return computedSignature == signature?.ToLower();
-    }
-
-    private async Task ProcessPaymentCompleted(CashfreeWebhookData.Data data)
-    {
-        // Extract order ID from the reference ID (order_123_123456789)
-        var orderNumber = data.order.order_id.Split('_')[1];
-
-        var order = await _context.Orders
-            .FirstOrDefaultAsync(o => o.OrderNumber == orderNumber);
-
-        if (order == null) return;
-
-        // Create payment record
-        var payment = new RetailCycleShopAPI.module.Payment
-        {
-            PaymentType = (int)PaymentType.Cashfree,
-            Amount = data.order.order_amount,
-            Status = (int)PaymentStatus.Completed,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-            OrderId = order.OrderId,
-            ReceiptUrl = data.payment.payment_url ?? $"https://sandbox.cashfree.com/pg/orders/{data.order.order_id}"
-        };
-
-        _context.Payments.Add(payment);
-
-        // Update order status
-        order.Status = (int)OrderStatus.Processing;
-        order.PaymentId = payment.PaymentId;
-        order.UpdatedAt = DateTime.UtcNow;
-
-        await _context.SaveChangesAsync();
-    }
-
-    private async Task ProcessPaymentFailed(CashfreeWebhookData.Data data)
-    {
-        // Handle failed payment
-        var orderNumber = data.order.order_id.Split('_')[1];
-
-        var order = await _context.Orders
-            .FirstOrDefaultAsync(o => o.OrderNumber == orderNumber);
-
-        if (order == null) return;
-
-        // Create payment record with failed status
-        var payment = new RetailCycleShopAPI.module.Payment
-        {
-            PaymentType = (int)PaymentType.Cashfree,
-            Amount = data.order.order_amount,
-            Status = (int)PaymentStatus.Failed,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
-            OrderId = order.OrderId
-        };
-
-        _context.Payments.Add(payment);
-        await _context.SaveChangesAsync();
     }
 }
 
+// DTO classes (add these to your project)
 public class CashfreeOrderRequest
 {
     public int OrderId { get; set; }
     public decimal Amount { get; set; }
+}
+
+
+public class CashfreeOrderResponse
+{
+    public string order_id { get; set; }
+    public string payment_link { get; set; }
 }
 
 public class PaymentVerificationRequest
@@ -337,11 +367,11 @@ public class PaymentVerificationRequest
     public decimal Amount { get; set; }
 }
 
-public class CashfreeOrderResponse
-{
-    public string order_id { get; set; }
-    public string payment_link { get; set; }
-}
+//public class CashfreeOrderResponse
+//{
+//    public string order_id { get; set; }
+//    public string payment_link { get; set; }
+//}
 
 public class CashfreePaymentsResponse : List<CashfreePayment>
 {
@@ -376,5 +406,11 @@ public class CashfreeWebhookData
             public string payment_status { get; set; }
             public string payment_url { get; set; }
         }
+    }
+    public class PaymentVerificationRequest
+    {
+        public int OrderId { get; set; }
+        public string CashfreeOrderId { get; set; }
+        public decimal Amount { get; set; }
     }
 }
