@@ -30,8 +30,8 @@ namespace RetailCycleShopAPI.Controllers
                 var summary = new
                 {
                     // Critical low stock (<= 2 items)
-                    CriticalStock = await _context.Cycles
-                        .Where(c => c.StockQuantity <= 2)
+                    outOfStock = await _context.Cycles
+                        .Where(c => c.StockQuantity < 1)
                         .CountAsync(),
 
                     // Low stock alerts
