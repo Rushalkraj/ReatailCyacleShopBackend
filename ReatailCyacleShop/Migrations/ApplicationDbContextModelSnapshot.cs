@@ -268,7 +268,7 @@ namespace RetailCycleShopAPI.Migrations
 
                     b.HasIndex("CustomerId");
 
-                    b.ToTable("Addresses");
+                    b.ToTable("Addresses", (string)null);
                 });
 
             modelBuilder.Entity("RetailCycleShopAPI.module.Customer", b =>
@@ -319,7 +319,7 @@ namespace RetailCycleShopAPI.Migrations
 
                     b.HasIndex("ShippingAddressId");
 
-                    b.ToTable("Customers");
+                    b.ToTable("Customers", (string)null);
                 });
 
             modelBuilder.Entity("RetailCycleShopAPI.module.Cycle", b =>
@@ -353,7 +353,7 @@ namespace RetailCycleShopAPI.Migrations
 
                     b.HasKey("CycleId");
 
-                    b.ToTable("Cycles");
+                    b.ToTable("Cycles", (string)null);
                 });
 
             modelBuilder.Entity("RetailCycleShopAPI.module.Inventory", b =>
@@ -378,7 +378,7 @@ namespace RetailCycleShopAPI.Migrations
                     b.HasIndex("CycleId")
                         .IsUnique();
 
-                    b.ToTable("Inventories");
+                    b.ToTable("Inventories", (string)null);
                 });
 
             modelBuilder.Entity("RetailCycleShopAPI.module.InventoryHistory", b =>
@@ -413,48 +413,7 @@ namespace RetailCycleShopAPI.Migrations
 
                     b.HasIndex("OrderId");
 
-                    b.ToTable("InventoryHistories");
-                });
-
-            modelBuilder.Entity("RetailCycleShopAPI.module.InvitedUser", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("FullName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("InvitationDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsRegistered")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Role")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Token")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Email")
-                        .IsUnique();
-
-                    b.HasIndex("Token")
-                        .IsUnique();
-
-                    b.ToTable("InvitedUsers");
+                    b.ToTable("InventoryHistories", (string)null);
                 });
 
             modelBuilder.Entity("RetailCycleShopAPI.module.Order", b =>
@@ -515,7 +474,7 @@ namespace RetailCycleShopAPI.Migrations
 
                     b.HasIndex("ShippingAddressId");
 
-                    b.ToTable("Orders");
+                    b.ToTable("Orders", (string)null);
                 });
 
             modelBuilder.Entity("RetailCycleShopAPI.module.OrderItem", b =>
@@ -553,7 +512,7 @@ namespace RetailCycleShopAPI.Migrations
 
                     b.HasIndex("OrderId");
 
-                    b.ToTable("OrderItems");
+                    b.ToTable("OrderItems", (string)null);
                 });
 
             modelBuilder.Entity("RetailCycleShopAPI.module.Payment", b =>
@@ -583,6 +542,9 @@ namespace RetailCycleShopAPI.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
+                    b.Property<string>("StripePaymentId")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -591,7 +553,7 @@ namespace RetailCycleShopAPI.Migrations
                     b.HasIndex("OrderId")
                         .IsUnique();
 
-                    b.ToTable("Payments");
+                    b.ToTable("Payments", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -754,7 +716,8 @@ namespace RetailCycleShopAPI.Migrations
 
             modelBuilder.Entity("RetailCycleShopAPI.module.Cycle", b =>
                 {
-                    b.Navigation("Inventory");
+                    b.Navigation("Inventory")
+                        .IsRequired();
 
                     b.Navigation("InventoryHistories");
                 });
