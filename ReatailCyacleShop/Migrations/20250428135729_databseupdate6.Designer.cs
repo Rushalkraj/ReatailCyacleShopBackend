@@ -12,8 +12,8 @@ using RetailCycleShopAPI.module;
 namespace RetailCycleShopAPI.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20250428091724_resetpassword")]
-    partial class resetpassword
+    [Migration("20250428135729_databseupdate6")]
+    partial class databseupdate6
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -274,6 +274,31 @@ namespace RetailCycleShopAPI.Migrations
                     b.ToTable("Addresses");
                 });
 
+            modelBuilder.Entity("RetailCycleShopAPI.module.AdminCreateUserModel", b =>
+                {
+                    b.Property<string>("Email")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("address")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("phoneNumber")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Email");
+
+                    b.ToTable("adminCreateUserModels");
+                });
+
             modelBuilder.Entity("RetailCycleShopAPI.module.Customer", b =>
                 {
                     b.Property<int>("CustomerId")
@@ -357,6 +382,37 @@ namespace RetailCycleShopAPI.Migrations
                     b.HasKey("CycleId");
 
                     b.ToTable("Cycles");
+                });
+
+            modelBuilder.Entity("RetailCycleShopAPI.module.EmployeeResponse", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("employeeResponses");
+                });
+
+            modelBuilder.Entity("RetailCycleShopAPI.module.ForgotPasswordModel", b =>
+                {
+                    b.Property<string>("Email")
+                        .HasColumnType("text");
+
+                    b.HasKey("Email");
+
+                    b.ToTable("forgotPasswordModels");
                 });
 
             modelBuilder.Entity("RetailCycleShopAPI.module.Inventory", b =>
@@ -449,6 +505,13 @@ namespace RetailCycleShopAPI.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("address")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("phoneNumber")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
@@ -458,6 +521,20 @@ namespace RetailCycleShopAPI.Migrations
                         .IsUnique();
 
                     b.ToTable("InvitedUsers");
+                });
+
+            modelBuilder.Entity("RetailCycleShopAPI.module.LoginModel", b =>
+                {
+                    b.Property<string>("Email")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Password")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Email");
+
+                    b.ToTable("loginModels");
                 });
 
             modelBuilder.Entity("RetailCycleShopAPI.module.Order", b =>
@@ -556,7 +633,7 @@ namespace RetailCycleShopAPI.Migrations
 
                     b.HasIndex("OrderId");
 
-                    b.ToTable("OrderItems");
+                    b.ToTable("OrderItem");
                 });
 
             modelBuilder.Entity("RetailCycleShopAPI.module.Payment", b =>
@@ -595,6 +672,24 @@ namespace RetailCycleShopAPI.Migrations
                         .IsUnique();
 
                     b.ToTable("Payments");
+                });
+
+            modelBuilder.Entity("RetailCycleShopAPI.module.ResetPasswordModel", b =>
+                {
+                    b.Property<string>("Email")
+                        .HasColumnType("text");
+
+                    b.Property<string>("NewPassword")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Email");
+
+                    b.ToTable("ResetPasswordModels");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

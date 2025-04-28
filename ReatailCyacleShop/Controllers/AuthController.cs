@@ -199,15 +199,29 @@ namespace RetailCycleShopAPI.Controllers
             // Create reset link (frontend URL)
             var resetLink = $"{_configuration["Frontend:BaseUrl"]}/reset-password?email={user.Email}&token={encodedToken}";
 
-            // Send email
-            await _emailService.SendEmailAsync(
-                user.Email,
-                "Reset Your Password",
-                $"Please reset your password by clicking here: {resetLink}");
+            try
+            {
+                // Send email
+                await _emailService.SendEmailAsync(
+                    user.Email,
+                    "Reset Your Password",
+                    $@"
+            <p>Hello,</p>
+            <p>We received a request to reset your password. Click the link below to proceed:</p>
+            <p><a href='{resetLink}'>Reset Password</a></p>
+            <p>If you didn't request this, please ignore this email.</p>
+            <p>This link will expire in 24 hours.</p>
+            <p>Best regards,<br/>Retail Cycle Shop Team</p>");
 
-            return Ok(new { Message = "If your email is registered, you'll receive a password reset link." });
+                return Ok(new { Message = "If your email is registered, you'll receive a password reset link." });
+            }
+            catch (Exception ex)
+            {
+                // Log the error
+                Console.WriteLine($"Error sending password reset email: {ex.Message}");
+                return StatusCode(500, new { Message = "Failed to send password reset email. Please try again later." });
+            }
         }
-
         [HttpPost("reset-password")]
         public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordModel model)
         {

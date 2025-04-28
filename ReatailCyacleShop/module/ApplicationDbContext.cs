@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using RetailCycleShopAPI.Controllers;
 using RetailCycleShopAPI.Models;
 using RetailCycleShopAPI.Models.Identity;
 
@@ -14,12 +15,19 @@ namespace RetailCycleShopAPI.module
         public DbSet<Order> Orders { get; set; } = null!;
         public DbSet<Payment> Payments { get; set; } = null!;
         public DbSet<Inventory> Inventories { get; set; } = null!;
-        public DbSet<InvitedUser> InvitedUsers { get; set; }
+        public DbSet<InvitedUser>? InvitedUsers { get; set; }
+        public DbSet<EmployeeResponse>? employeeResponses { get; set; }
+        public DbSet<LoginModel>? loginModels { get; set; }
+
+        public DbSet<OrderItem>? orderItems { get; set; }
+        public DbSet<AdminCreateUserModel>? adminCreateUserModels { get; set; }
 
         public DbSet<InventoryHistory> InventoryHistories { get; set; } = null!;
         public DbSet<Customer> Customers { get; set; } = null!;
         public DbSet<Address> Addresses { get; set; } = null!;
         public DbSet<OrderItem> OrderItems { get; set; } = null!;
+        public DbSet<ForgotPasswordModel> forgotPasswordModels { get; set; } = null!;
+        public DbSet<ResetPasswordModel>? ResetPasswordModels { get; set; }
 
       
 

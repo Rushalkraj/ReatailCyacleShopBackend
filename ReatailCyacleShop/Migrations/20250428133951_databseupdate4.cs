@@ -5,7 +5,7 @@
 namespace RetailCycleShopAPI.Migrations
 {
     /// <inheritdoc />
-    public partial class resetpass : Migration
+    public partial class databseupdate4 : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

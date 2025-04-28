@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using RetailCycleShopAPI.module;
@@ -11,9 +12,11 @@ using RetailCycleShopAPI.module;
 namespace RetailCycleShopAPI.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250428131716_databseupdate1")]
+    partial class databseupdate1
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -271,31 +274,6 @@ namespace RetailCycleShopAPI.Migrations
                     b.ToTable("Addresses");
                 });
 
-            modelBuilder.Entity("RetailCycleShopAPI.module.AdminCreateUserModel", b =>
-                {
-                    b.Property<string>("Email")
-                        .HasColumnType("text");
-
-                    b.Property<string>("FullName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Role")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("address")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("phoneNumber")
-                        .HasColumnType("text");
-
-                    b.HasKey("Email");
-
-                    b.ToTable("adminCreateUserModels");
-                });
-
             modelBuilder.Entity("RetailCycleShopAPI.module.Customer", b =>
                 {
                     b.Property<int>("CustomerId")
@@ -500,13 +478,6 @@ namespace RetailCycleShopAPI.Migrations
 
                     b.Property<string>("Token")
                         .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("address")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("phoneNumber")
                         .HasColumnType("text");
 
                     b.HasKey("Id");

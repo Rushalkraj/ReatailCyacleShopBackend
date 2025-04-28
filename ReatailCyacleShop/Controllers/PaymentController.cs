@@ -135,8 +135,8 @@ public class CashfreeController : ControllerBase
                     return StatusCode(500, "Invalid response from payment gateway");
                 }
 
-                // Construct the payment link manually since it's not directly in the response
-                var paymentLink = $"https://sandbox.cashfree.com/pg/redirection/#/{paymentSessionId.GetString()}";
+             
+                var paymentLink = $"https://sandbox.cashfree.com/pg/{paymentSessionId.GetString()}";
 
                 return Ok(new
                 {

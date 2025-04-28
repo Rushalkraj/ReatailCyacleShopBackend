@@ -12,6 +12,7 @@ namespace RetailCycleShopAPI.Services
     {
         private readonly string _apiKey;
         private readonly string _senderEmail;
+        private readonly string _senderName;
         private readonly HttpClient _httpClient;
 
 
@@ -21,26 +22,22 @@ namespace RetailCycleShopAPI.Services
         {
             _apiKey = config["Brevo:ApiKey"] ?? throw new ArgumentNullException("Brevo:ApiKey");
             _senderEmail = config["Brevo:SenderEmail"] ?? throw new ArgumentNullException("Brevo:SenderEmail");
+            _senderName = config["Brevo:SenderName"] ?? "Retail Cycle Shop";
             _httpClient = new HttpClient();
             _httpClient.DefaultRequestHeaders.Add("api-key", _apiKey);
         }
 
-        public Task SendEmailAsync(string? email, string v1, string v2)
-        {
-            throw new NotImplementedException();
-        }
-
-        public async Task SendPasswordSetupEmail(string email, string name, string link)
+        public async Task SendEmailAsync(string email, string subject, string htmlContent)
         {
             if (string.IsNullOrEmpty(email))
                 throw new ArgumentException("Email cannot be null or empty", nameof(email));
 
             var emailBody = new
             {
-                sender = new { name = "Retail Cycle Shop", email = _senderEmail },
-                to = new[] { new { email, name } },
-                subject = "Set Your Password",
-                htmlContent = $"<p>Hello {name},</p><p><a href='{link}'>Click here to set your password</a></p>"
+                sender = new { name = _senderName, email = _senderEmail },
+                to = new[] { new { email } },
+                subject,
+                htmlContent
             };
 
             var content = new StringContent(
@@ -57,6 +54,19 @@ namespace RetailCycleShopAPI.Services
                 var responseBody = await response.Content.ReadAsStringAsync();
                 throw new Exception($"Email failed to send: {response.StatusCode} - {responseBody}");
             }
+        }
+
+
+        public async Task SendPasswordSetupEmail(string email, string name, string link)
+        {
+            var subject = "Set Your Password";
+            var htmlContent = $@"
+                <p>Hello {name},</p>
+                <p>Please <a href='{link}'>click here</a> to set your password for your Retail Cycle Shop account.</p>
+                <p>If you didn't request this, please ignore this email.</p>
+                <p>Best regards,<br/>Retail Cycle Shop Team</p>";
+
+            await SendEmailAsync(email, subject, htmlContent);
         }
     }
 }
