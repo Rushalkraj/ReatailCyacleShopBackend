@@ -25,6 +25,11 @@ namespace RetailCycleShopAPI.Services
             _httpClient.DefaultRequestHeaders.Add("api-key", _apiKey);
         }
 
+        public Task SendEmailAsync(string? email, string v1, string v2)
+        {
+            throw new NotImplementedException();
+        }
+
         public async Task SendPasswordSetupEmail(string email, string name, string link)
         {
             if (string.IsNullOrEmpty(email))

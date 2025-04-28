@@ -178,6 +178,63 @@ namespace RetailCycleShopAPI.Controllers
             var isValid = await _invitationService.IsEmailInvited(email);
             return Ok(new { IsValid = isValid });
         }
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordModel model)
+        {
+            if (string.IsNullOrEmpty(model.Email))
+            {
+                return BadRequest("Email is required.");
+            }
+
+            var user = await _userManager.FindByEmailAsync(model.Email);
+            if (user == null)
+            {
+                // Don't reveal that the user doesn't exist for security reasons
+                return Ok(new { Message = "If your email is registered, you'll receive a password reset link." });
+            }
+
+            var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+            var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
+
+            // Create reset link (frontend URL)
+            var resetLink = $"{_configuration["Frontend:BaseUrl"]}/reset-password?email={user.Email}&token={encodedToken}";
+
+            // Send email
+            await _emailService.SendEmailAsync(
+                user.Email,
+                "Reset Your Password",
+                $"Please reset your password by clicking here: {resetLink}");
+
+            return Ok(new { Message = "If your email is registered, you'll receive a password reset link." });
+        }
+
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordModel model)
+        {
+            if (string.IsNullOrEmpty(model.Email) ||
+                string.IsNullOrEmpty(model.Token) ||
+                string.IsNullOrEmpty(model.NewPassword))
+            {
+                return BadRequest("Email, token and new password are required.");
+            }
+
+            var user = await _userManager.FindByEmailAsync(model.Email);
+            if (user == null)
+            {
+                // Don't reveal that the user doesn't exist for security reasons
+                return Ok(new { Message = "Password reset successfully." });
+            }
+
+            var decodedToken = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(model.Token));
+            var result = await _userManager.ResetPasswordAsync(user, decodedToken, model.NewPassword);
+
+            if (!result.Succeeded)
+            {
+                return BadRequest(result.Errors);
+            }
+
+            return Ok(new { Message = "Password reset successfully." });
+        }
         [HttpPost("setup-password")]
         public async Task<IActionResult> SetupPassword([FromBody] SetupPasswordModel model)
         {
