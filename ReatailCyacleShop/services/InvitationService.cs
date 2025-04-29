@@ -35,6 +35,8 @@ namespace RetailCycleShopAPI.Services
                 Email = model.Email,
                 FullName = model.FullName,
                 Role = model.Role,
+                address= model.address,
+                phoneNumber = model.phoneNumber,
                 Token = token,
                 IsRegistered = false,
                 InvitationDate = DateTime.UtcNow
