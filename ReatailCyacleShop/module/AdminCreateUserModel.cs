@@ -9,8 +9,8 @@ namespace RetailCycleShopAPI.module
         public string Email { get; set; } = string.Empty;
         public string address {  get; set; } = string.Empty;
 
-        //public string? phoneNumber {  get; set; }
-        
+        public string? phoneNumber { get; set; }
+
         public string Role { get; set; } = string.Empty;
     }
 

@@ -12,7 +12,7 @@ namespace RetailCycleShopAPI.module
 
         public string address { get; set; } = string.Empty;
 
-        //public string? phoneNumber { get; set; }
+        public string? phoneNumber { get; set; }
         public string Token { get; set; } = string.Empty;
         public DateTime InvitationDate { get; set; } = DateTime.UtcNow;
         public bool IsRegistered { get; set; } = false;
