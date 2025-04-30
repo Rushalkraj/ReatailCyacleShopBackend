@@ -12,6 +12,7 @@ using RetailCycleShopAPI.Services;
 using RetailCycleShopAPI.Interfaces;
 using RetailCycleShopAPI.Models;
 using Microsoft.EntityFrameworkCore;
+using RetailCycleShopAPI.models.dtos;
 
 namespace RetailCycleShopAPI.Controllers
 {
@@ -64,7 +65,7 @@ namespace RetailCycleShopAPI.Controllers
         }
 
         [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] RegisterModel model)
+        public async Task<IActionResult> Register([FromBody] registerdtos model)
         {
             // Validate input
             if (model == null || string.IsNullOrEmpty(model.Email) || string.IsNullOrEmpty(model.Password))
@@ -92,6 +93,7 @@ namespace RetailCycleShopAPI.Controllers
                 UserName = model.Email,
                 Email = model.Email,
                 FullName = model.FullName,
+                PhoneNumber=model.PhoneNumber,
                 Role = model.Role
             };
 
